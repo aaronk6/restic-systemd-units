@@ -125,14 +125,15 @@ Add the following parameters to your configuration:
     HOSTNAME=myhostname # Defaults to the system's hostname
 
 Store your InfluxDB token in the specified file, e.g.,
-`/etc/restic/influxdb_token`.
+`/etc/restic/influxdb_token`, change ownership to the `restic` user,
+and set its permissions to `0600` to prevent unauthorized access.
 
 Example metric that is sent to InfluxDB:
 
     restic_backup,host=homeserver,backup_dir=/home,repository=sftp:example.com:homeserver files_new=0,files_changed=0,files_unmodified=13,dirs_new=0,dirs_changed=0,dirs_unmodified=7,data_blobs=0,tree_blobs=0,data_added=0,total_files_processed=13,total_bytes_processed=414770820,total_duration=9.057845105,snapshot_id="69ba707782572043c792275aca50b04bb375c0b3fdc11cc10caaf27a9b853454"
 
-**Note:** Currently, this InfluxDB logging is implemented only for
-the `backup` command. The `forget` and `check` commands will continue
+**Note:** Currently, InfluxDB logging is implemented only for the
+`backup` command. The `forget` and `check` commands will continue
 to write to stdout and won't send metrics to InfluxDB.
 
 ## Lockfiles
