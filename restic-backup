@@ -3,6 +3,16 @@
 : ${RESTIC_PRUNE_DOW:=0}
 : ${RESTIC_BIN:=/usr/libexec/restic/restic}
 : ${RESTIC_CACHE_DIR:=/var/cache/restic}
+: ${INFLUXDB_URL:=}
+: ${INFLUXDB_TOKEN_FILE:=}
+: ${INFLUXDB_ORG:=}
+: ${INFLUXDB_BUCKET:=}
+: ${METRIC_NAME:=restic_backup}
+: ${HOSTNAME_VALUE:=$(hostname)}
+: ${DEBUG:=0}
+
+# Ensure INFLUXDB_URL doesn't have a trailing slash
+INFLUXDB_URL="${INFLUXDB_URL%/}"
 
 export RESTIC_CACHE_DIR
 
@@ -13,25 +23,93 @@ for required in BACKUP_DIR RESTIC_REPOSITORY; do
 	fi
 done
 
+format_for_influx() {
+    local input="$1"
+    echo "$input" | sed 's/ /\\ /g' | sed 's/,/\\,/g' | sed 's/=/\\=/g'
+}
+
 (
 set -e
 
 echo "* Starting backup of $BACKUP_DIR to $RESTIC_REPOSITORY"
-$RESTIC_BIN $RESTIC_COMMON_ARGS \
-	backup $RESTIC_BACKUP_ARGS $BACKUP_DIR
+
+if [[ -n "$INFLUXDB_URL" && -n "$INFLUXDB_ORG" && -n "$INFLUXDB_BUCKET" && -n "$INFLUXDB_TOKEN_FILE" ]]; then
+
+    # Check for dependencies
+    for dep in curl jq; do
+        if ! command -v $dep &> /dev/null; then
+            echo "ERROR: $dep is not installed" >&2
+            exit 1
+        fi
+    done
+
+    if [[ -f "$INFLUXDB_TOKEN_FILE" ]]; then
+        INFLUXDB_TOKEN=$(cat "$INFLUXDB_TOKEN_FILE")
+    else
+        echo "ERROR: INFLUXDB_TOKEN_FILE '$INFLUXDB_TOKEN_FILE' does not exist or is not readable" >&2
+        exit 1
+    fi
+
+    echo "* Logging to InfluxDB at $INFLUXDB_URL"
+
+    BACKUP_OUTPUT=$($RESTIC_BIN $RESTIC_COMMON_ARGS backup $RESTIC_BACKUP_ARGS $BACKUP_DIR --json | tail -n 1)
+    
+    if [[ $DEBUG -eq 1 ]]; then
+        echo "Backup summary: $BACKUP_OUTPUT"
+    fi
+    
+    FORMATTED_BACKUP_DIR=$(format_for_influx "$BACKUP_DIR")
+    FORMATTED_REPO=$(format_for_influx "$RESTIC_REPOSITORY")
+
+    declare -A metrics
+    keys=(
+        "files_new"
+        "files_changed"
+        "files_unmodified"
+        "dirs_new"
+        "dirs_changed"
+        "dirs_unmodified"
+        "data_blobs"
+        "tree_blobs"
+        "data_added"
+        "total_files_processed"
+        "total_bytes_processed"
+        "total_duration"
+        "snapshot_id"
+    )
+
+    for key in "${keys[@]}"; do
+        metrics["$key"]=$(echo "$BACKUP_OUTPUT" | jq ".$key")
+    done
+
+    DATA="$METRIC_NAME,host=$HOSTNAME_VALUE,backup_dir=$FORMATTED_BACKUP_DIR,repository=$FORMATTED_REPO "
+    for key in "${keys[@]}"; do
+        DATA+="$key=${metrics[$key]},"
+    done
+    DATA=${DATA%,}  # Remove the trailing comma
+
+    if [[ $DEBUG -eq 1 ]]; then
+        echo "Payload: $DATA"
+    fi
+
+    curl -sS "$INFLUXDB_URL/api/v2/write?org=$INFLUXDB_ORG&bucket=$INFLUXDB_BUCKET" \
+        -H "Authorization: Token $INFLUXDB_TOKEN" \
+        --data-binary "$DATA"
+
+else
+    $RESTIC_BIN $RESTIC_COMMON_ARGS backup $RESTIC_BACKUP_ARGS $BACKUP_DIR
+fi
 
 today=$(date +%w)
 if (( today == RESTIC_PRUNE_DOW )); then
 	echo "* Pruning old backups from $BACKUP_DIR in $RESTIC_REPOSITORY"
-	$RESTIC_BIN $RESTIC_COMMON_ARGS \
-		forget --prune $RESTIC_FORGET_ARGS
+	$RESTIC_BIN $RESTIC_COMMON_ARGS forget --prune $RESTIC_FORGET_ARGS
 fi
 )
 
 retcode=$?
 
 echo "* Ensuring that repository $RESTIC_REPOSITORY is unlocked"
-$RESTIC_BIN $RESTIC_COMMON_ARGS \
-	unlock
+$RESTIC_BIN $RESTIC_COMMON_ARGS unlock
 
 exit $retcode
