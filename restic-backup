@@ -52,10 +52,44 @@ if [[ -n "$INFLUXDB_URL" && -n "$INFLUXDB_ORG" && -n "$INFLUXDB_BUCKET" && -n "$
 
 	echo "* Logging to InfluxDB at $INFLUXDB_URL"
 
-	BACKUP_OUTPUT=$($RESTIC_BIN $RESTIC_COMMON_ARGS backup $RESTIC_BACKUP_ARGS $BACKUP_DIR --json | tail -n 1)
+	# Temporary files to store the last status and summary
+	TEMP_LAST_STATUS=$(mktemp)
+	TEMP_SUMMARY=$(mktemp)
+
+	trap cleanup EXIT
+
+	cleanup() {
+		if [[ "$DEBUG" -eq 1 ]]; then
+			echo "Cleaning temp files"
+		fi
+		rm -f "$TEMP_LAST_STATUS" "$TEMP_SUMMARY"
+	}
+
+	# Process the backup output in real-time
+	while IFS= read -r line; do
+		case "$line" in
+			*\"message_type\":\"status\"*)
+				echo "$line" > "$TEMP_LAST_STATUS"
+				;;
+			*\"message_type\":\"summary\"*)
+				echo "$line" > "$TEMP_SUMMARY"
+				break
+				;;
+		esac
+	done < <($RESTIC_BIN $RESTIC_COMMON_ARGS backup $RESTIC_BACKUP_ARGS $BACKUP_DIR --json)
+
+	# Extract the error count from the last status message
+	LAST_STATUS=$(cat "$TEMP_LAST_STATUS")
 	
-	if [[ $DEBUG -eq 1 ]]; then
-		echo "Backup summary: $BACKUP_OUTPUT"
+	# `// 0` means setting to 0 when the field is not present
+	ERROR_COUNT=$(echo "$LAST_STATUS" | jq -r '.error_count // 0')
+
+	SUMMARY=$(cat "$TEMP_SUMMARY")
+
+	if [[ "$DEBUG" -eq 1 ]]; then
+		echo "Last status: $LAST_STATUS"
+		echo "Error count: $ERROR_COUNT"
+		echo "Summary: $SUMMARY"
 	fi
 	
 	FORMATTED_BACKUP_DIR=$(format_for_influx "$BACKUP_DIR")
@@ -76,10 +110,15 @@ if [[ -n "$INFLUXDB_URL" && -n "$INFLUXDB_ORG" && -n "$INFLUXDB_BUCKET" && -n "$
 		"total_bytes_processed"
 		"total_duration"
 		"snapshot_id"
+		"error_count"
 	)
 
 	for key in "${keys[@]}"; do
-		metrics["$key"]=$(echo "$BACKUP_OUTPUT" | jq ".$key")
+		if [[ "$key" == "error_count" ]]; then
+			metrics["$key"]="$ERROR_COUNT"
+		else
+			metrics["$key"]=$(echo "$SUMMARY" | jq ".$key")
+		fi
 	done
 
 	DATA="$METRIC_NAME,host=$HOSTNAME_VALUE,backup_dir=$FORMATTED_BACKUP_DIR,repository=$FORMATTED_REPO "
