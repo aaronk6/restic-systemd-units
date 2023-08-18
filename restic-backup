@@ -103,13 +103,15 @@ fi
 today=$(date +%w)
 if (( today == RESTIC_PRUNE_DOW )); then
 	echo "* Pruning old backups from $BACKUP_DIR in $RESTIC_REPOSITORY"
-	$RESTIC_BIN $RESTIC_COMMON_ARGS forget --prune $RESTIC_FORGET_ARGS
+	$RESTIC_BIN $RESTIC_COMMON_ARGS \
+		forget --prune $RESTIC_FORGET_ARGS
 fi
 )
 
 retcode=$?
 
 echo "* Ensuring that repository $RESTIC_REPOSITORY is unlocked"
-$RESTIC_BIN $RESTIC_COMMON_ARGS unlock
+$RESTIC_BIN $RESTIC_COMMON_ARGS \
+	unlock
 
 exit $retcode
