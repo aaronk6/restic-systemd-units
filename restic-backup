@@ -10,7 +10,7 @@
 : ${METRIC_NAME:=restic_backup}
 : ${HOSTNAME_VALUE:=$(hostname)}
 : ${DEBUG:=0}
-: ${RESTIC_LOCK_FILE:=/run/restic-backup.lock}
+: ${RESTIC_LOCK_FILE:=/run/restic/backup.lock}
 
 exec 200>"$RESTIC_LOCK_FILE" || exit 1
 flock 200 || exit 1
