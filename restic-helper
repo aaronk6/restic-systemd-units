@@ -5,7 +5,11 @@
 : ${RESTIC_LOCK_FILE:=/run/restic/helper.lock}
 
 exec 200>"$RESTIC_LOCK_FILE" || exit 1
-flock 200 || exit 1
+
+if ! flock -n 200; then
+    echo "Another instance is running. Waiting..."
+    flock 200
+fi
 
 export RESTIC_CACHE_DIR
 
