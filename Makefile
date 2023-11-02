@@ -76,8 +76,8 @@ install-cachedir:
 	$(INSTALL) -d -m 750 -o $(RESTIC_USER) -g $(RESTIC_GROUP) $(cachedir)
 
 install-tmpfiles: restic-tmpfiles.conf
- 	$(INSTALL) -m 755 -d $(DESTDIR)$(tmpfilesdir)
- 	$(INSTALL) -m 644 restic-tmpfiles.conf $(DESTDIR)$(tmpfilesdir)/restic.conf
+	$(INSTALL) -m 755 -d $(DESTDIR)$(tmpfilesdir)
+	$(INSTALL) -m 644 restic-tmpfiles.conf $(DESTDIR)$(tmpfilesdir)/restic.conf
 
 install-restic: restic install-libexec install-bin install-cachedir
 	$(INSTALL) -m 755 restic $(bindir)/restic
