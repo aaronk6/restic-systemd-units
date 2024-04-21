@@ -48,6 +48,10 @@ restic-%@.service: restic-%@.service.in
 	    -e "s|@RESTIC_BACKUP@|$(libexecdir)/restic-backup|g" \
 			-e "s|@RESTIC_HELPER@|$(bindir)/restic-helper|g" $< > $@ || rm -f $@
 
+restic-tmpfiles.conf: restic-tmpfiles.conf.in
+	sed -e "s|@RESTIC_USER@|$(RESTIC_USER)|g" \
+		-e "s|@RESTIC_GROUP@|$(RESTIC_GROUP)|g" $< > $@ || rm -f $@
+
 all: $(UNITS)
 
 install: install-restic install-units install-libexec install-bin
@@ -78,6 +82,7 @@ install-cachedir:
 install-tmpfiles: restic-tmpfiles.conf
 	$(INSTALL) -m 755 -d $(DESTDIR)$(tmpfilesdir)
 	$(INSTALL) -m 644 restic-tmpfiles.conf $(DESTDIR)$(tmpfilesdir)/restic.conf
+	systemd-tmpfiles --create $(DESTDIR)$(tmpfilesdir)/restic.conf
 
 install-restic: restic install-libexec install-bin install-cachedir install-tmpfiles
 	$(INSTALL) -m 755 restic $(bindir)/restic
