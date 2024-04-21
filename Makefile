@@ -79,7 +79,7 @@ install-tmpfiles: restic-tmpfiles.conf
 	$(INSTALL) -m 755 -d $(DESTDIR)$(tmpfilesdir)
 	$(INSTALL) -m 644 restic-tmpfiles.conf $(DESTDIR)$(tmpfilesdir)/restic.conf
 
-install-restic: restic install-libexec install-bin install-cachedir
+install-restic: restic install-libexec install-bin install-cachedir install-tmpfiles
 	$(INSTALL) -m 755 restic $(bindir)/restic
 	$(INSTALL) -m 550 -o $(RESTIC_USER) -g $(RESTIC_GROUP) restic $(libexecdir)/restic
 	setcap cap_dac_read_search=+ep $(libexecdir)/restic
